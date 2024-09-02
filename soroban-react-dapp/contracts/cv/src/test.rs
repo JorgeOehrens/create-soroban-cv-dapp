@@ -1,47 +1,69 @@
-#![cfg(test)]
-
-use super::*;
-use soroban_sdk::{testutils::Address as _, Address, Env, String, Vec};
+#![no_std]
+use soroban_sdk::{test, Address, Env, String, Vec, panic_with_error};
 
 #[test]
-fn test_cv_contract() {
+fn test_multiple_initializations() {
     let env = Env::default();
-    let contract_id = env.register_contract(None, CVContract);
-    let client = CVContractClient::new(&env, &contract_id);
+    let owner = Address::new("owner1");
+    
+    CVContract::create_cv(&env, owner.clone(), String::from_str(&env, "John Doe"), String::from_str(&env, "john.doe@example.com"));
+    
+    let result = panic::catch_unwind(|| {
+        CVContract::create_cv(&env, owner.clone(), String::from_str(&env, "John Doe"), String::from_str(&env, "john.doe@example.com"));
+    });
+    
+    assert!(result.is_err(), "CV creation should fail if it already exists");
+}
 
-    // Test initialization
-    let owner = Address::random(&env);
-    client.init(&owner);
+#[test]
+fn test_security_concerns() {
+    let env = Env::default();
+    let owner1 = Address::new("owner1");
+    let owner2 = Address::new("owner2");
+    
+    CVContract::create_cv(&env, owner1.clone(), String::from_str(&env, "John Doe"), String::from_str(&env, "john.doe@example.com"));
+    
+    let result = panic::catch_unwind(|| {
+        CVContract::update_cv(&env, owner1.clone(), Some(String::from_str(&env, "Jane Doe")), None, None, None, None);
+    });
+    
+    assert!(result.is_err(), "Unauthorized update should fail");
 
-    // Test updating CV
-    let name = String::from_str(&env, "Jorge Oehrens");
-    let email = String::from_str(&env, "jorge.oehrens@gmail.com");
-    client.update_cv(&owner, &name, &email);
+    CVContract::create_cv(&env, owner2.clone(), String::from_str(&env, "Alice Smith"), String::from_str(&env, "alice.smith@example.com"));
+    CVContract::update_cv(&env, owner2.clone(), Some(String::from_str(&env, "Alice Johnson")), None, None, None, None);
+    
+    let cv = CVContract::get_cv(&env, owner2.clone());
+    assert_eq!(cv.name.to_string(), "Alice Johnson", "Name should be updated for owner2");
+}
 
-    // Test adding skills
-    let skill1 = String::from_str(&env, "Rust");
-    let skill2 = String::from_str(&env, "Soroban");
-    client.add_skill(&owner, &skill1);
-    client.add_skill(&owner, &skill2);
+#[test]
+fn test_error_handling() {
+    let env = Env::default();
+    let owner = Address::new("owner3");
 
-    // Test adding experience
-    let experience1 = String::from_str(&env, "Full Stack Developer at Canasta Ahorro");
-    let experience2 = String::from_str(&env, "Blockchain Developer at Stellar");
-    client.add_experience(&owner, &experience1);
-    client.add_experience(&owner, &experience2);
+    let result = panic::catch_unwind(|| {
+        CVContract::update_cv(&env, owner.clone(), Some(String::from_str(&env, "")), None, None, None, None);
+    });
+    
+    assert!(result.is_err(), "Update should fail if name is empty");
 
-    // Test adding education
-    let education1 = String::from_str(&env, "Civil Engineering");
-    let education2 = String::from_str(&env, "Blockchain Development Certification");
-    client.add_education(&owner, &education1);
-    client.add_education(&owner, &education2);
+    CVContract::create_cv(&env, owner.clone(), String::from_str(&env, "Bob Lee"), String::from_str(&env, "bob.lee@example.com"));
+    let result = panic::catch_unwind(|| {
+        CVContract::update_cv(&env, owner.clone(), None, Some(String::from_str(&env, "")), None, None, None);
+    });
+    
+    assert!(result.is_err(), "Update should fail if email is empty");
+}
 
-    // Test getting CV
-    let cv = client.get_cv(&owner);
-    assert_eq!(cv.owner, owner);
-    assert_eq!(cv.name, name);
-    assert_eq!(cv.email, email);
-    assert_eq!(cv.skills, Vec::from_array(&env, [skill1, skill2]));
-    assert_eq!(cv.experience, Vec::from_array(&env, [experience1, experience2]));
-    assert_eq!(cv.education, Vec::from_array(&env, [education1, education2]));
+#[test]
+fn test_get_cv() {
+    let env = Env::default();
+    let owner = Address::new("owner4");
+
+    CVContract::create_cv(&env, owner.clone(), String::from_str(&env, "Emma Watson"), String::from_str(&env, "emma.watson@example.com"));
+    
+    let cv = CVContract::get_cv(&env, owner.clone());
+    
+    assert_eq!(cv.name.to_string(), "Emma Watson", "Name should match");
+    assert_eq!(cv.email.to_string(), "emma.watson@example.com", "Email should match");
 }
