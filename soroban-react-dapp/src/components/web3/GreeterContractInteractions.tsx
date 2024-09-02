@@ -13,6 +13,14 @@ import Link from 'next/link'
 import { contractInvoke, useRegisteredContract } from '@soroban-react/contracts'
 import { nativeToScVal } from '@stellar/stellar-sdk'
 
+type CV = {
+  name: string,
+  email: string,
+  skills: string[],
+  experience: string[],
+  education: string[]
+}
+
 type UpdateGreetingValues = { 
   name: string, 
   email: string, 
@@ -28,7 +36,7 @@ export const GreeterContractInteractions: FC = () => {
   const [updateIsLoading, setUpdateIsLoading] = useState<boolean>(false)
   const { register, handleSubmit } = useForm<UpdateGreetingValues>()
   
-  const [fetchedGreeting, setGreeterMessage] = useState<string>()
+  const [fetchedGreeting, setGreeterMessage] = useState<string>('Connect your wallet')
   const [updateFrontend, toggleUpdate] = useState<boolean>(true)
   const [contractAddressStored, setContractAddressStored] = useState<string>()
 
@@ -64,11 +72,12 @@ export const GreeterContractInteractions: FC = () => {
         });
         console.log(result);
 
-        const cv = StellarSdk.scValToNative(result as StellarSdk.xdr.ScVal) as string;
+        const cv: CV = StellarSdk.scValToNative(result as StellarSdk.xdr.ScVal) as CV;
+
         const cvString = `Name: ${cv.name}\nEmail: ${cv.email}\nSkills: ${cv.skills.join(', ')}\nExperience: ${cv.experience.join(', ')}\nEducation: ${cv.education.join(', ')}`;
 
         console.log(cvString);
-        setGreeterMessage(cvString); // Actualiza el estado con el CV obtenido
+        setGreeterMessage(cvString); 
     } catch (e) {
         console.error(e);
         toast.error('Error al obtener el CV. Intenta de nuevo…');
@@ -77,7 +86,10 @@ export const GreeterContractInteractions: FC = () => {
 
 useEffect(() => {
   if (address) {
-      void fetchCV(); // Llama a la nueva función al conectarse
+      void fetchCV();
+  }else{
+    setGreeterMessage('Connect your Wallet'); 
+
   }
 }, [address, contract]);
   const updateGreeting = async ({ name, email, skills, experience, education }: UpdateGreetingValues) => {
@@ -99,48 +111,15 @@ useEffect(() => {
         setUpdateIsLoading(true)
 
         try {
-          // Initialize contract
-          await contract?.invoke({
-            method: 'init',
-            args: [nativeToScVal(address, { type: "address" })],
-            signAndSend: true
-          });
-
-          // Update name and email
           await contract?.invoke({
             method: 'update_cv',
             args: [
               nativeToScVal(address, { type: "address" }), // owner
               nativeToScVal(name, { type: "string" }),
-              nativeToScVal(email, { type: "string" })
-            ],
-            signAndSend: true
-          });
-
-          // Add skills, experience, and education
-          await contract?.invoke({
-            method: 'add_skill',
-            args: [
-              nativeToScVal(address, { type: "address" }), // owner
-              nativeToScVal(skills, { type: "string" })
-            ],
-            signAndSend: true
-          });
-
-          await contract?.invoke({
-            method: 'add_experience',
-            args: [
-              nativeToScVal(address, { type: "address" }), // owner
-              nativeToScVal(experience, { type: "string" })
-            ],
-            signAndSend: true
-          });
-
-          await contract?.invoke({
-            method: 'add_education',
-            args: [
-              nativeToScVal(address, { type: "address" }), // owner
-              nativeToScVal(education, { type: "string" })
+              nativeToScVal(email, { type: "string" }),
+              nativeToScVal(skills.split(',').map(s => s.trim()), { type: "vector<string>" }),
+              nativeToScVal(experience.split(',').map(e => e.trim()), { type: "vector<string>" }),
+              nativeToScVal(education.split(',').map(e => e.trim()), { type: "vector<string>" }),
             ],
             signAndSend: true
           });
@@ -181,7 +160,7 @@ useEffect(() => {
               placeholder={fetchedGreeting}
               disabled={true}
               resize="none" 
-              tw="bg-transparent text-white" // Asegúrate de que el texto sea legible
+              tw="bg-transparent text-white" 
             />
           </FormControl>
         </Card>
