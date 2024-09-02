@@ -16,9 +16,9 @@ import { nativeToScVal } from '@stellar/stellar-sdk'
 type CV = {
   name: string,
   email: string,
-  skills: string[],
-  experience: string[],
-  education: string[]
+  skills: string,
+  experience: string,
+  education: string
 }
 
 type UpdateGreetingValues = { 
@@ -55,13 +55,13 @@ export const GreeterContractInteractions: FC = () => {
       console.log(contractAddress);
       setContractAddressStored(contractAddress)
       setFetchIsLoading(true)
-      
     }
   }, [sorobanContext, contract])
 
   useEffect(() => { void fetchGreeting() }, [updateFrontend, fetchGreeting])
 
   const { activeChain, server, address } = sorobanContext
+
   const fetchCV = async () => {
     if (!address || !contract) return;
 
@@ -70,11 +70,22 @@ export const GreeterContractInteractions: FC = () => {
             method: 'get_cv',
             args: [nativeToScVal(address, { type: "address" })],
         });
-        console.log(result);
+
+        if (!result) {
+            console.log('No se encontró el CV');
+            setGreeterMessage('No se encontró el CV para esta dirección.');
+            return;
+        }
 
         const cv: CV = StellarSdk.scValToNative(result as StellarSdk.xdr.ScVal) as CV;
 
-        const cvString = `Name: ${cv.name}\nEmail: ${cv.email}\nSkills: ${cv.skills.join(', ')}\nExperience: ${cv.experience.join(', ')}\nEducation: ${cv.education.join(', ')}`;
+        if (!cv || !cv.name) {
+            console.log('CV está vacío');
+            setGreeterMessage('CV está vacío.');
+            return;
+        }
+
+        const cvString = `Name: ${cv.name}\nEmail: ${cv.email}\nSkills: ${cv.skills}\nExperience: ${cv.experience}\nEducation: ${cv.education}`;
 
         console.log(cvString);
         setGreeterMessage(cvString); 
@@ -84,57 +95,82 @@ export const GreeterContractInteractions: FC = () => {
     }
 };
 
-useEffect(() => {
-  if (address) {
-      void fetchCV();
-  }else{
-    setGreeterMessage('Connect your Wallet'); 
+  useEffect(() => {
+    if (address) {
+        void fetchCV();
+    } else {
+        setGreeterMessage('Connect your Wallet'); 
+    }
+  }, [address, contract]);
 
-  }
-}, [address, contract]);
+
   const updateGreeting = async ({ name, email, skills, experience, education }: UpdateGreetingValues) => {
     if (!address) {
-      console.log("Address is not defined")
-      toast.error('Wallet is not connected. Try again...')
-      return
+      console.log("Address is not defined");
+      toast.error('Wallet is not connected. Try again...');
+      return;
     } else if (!server) {
-      console.log("Server is not setup")
-      toast.error('Server is not defined. Unable to connect to the blockchain')
-      return
+      console.log("Server is not setup");
+      toast.error('Server is not defined. Unable to connect to the blockchain');
+      return;
     } else {
-      const currentChain = activeChain?.name?.toLocaleLowerCase()
+      const currentChain = activeChain?.name?.toLocaleLowerCase();
       if (!currentChain) {
-        console.log("No active chain")
-        toast.error('Wallet not connected. Try again…')
-        return
+        console.log("No active chain");
+        toast.error('Wallet not connected. Try again…');
+        return;
       } else {
-        setUpdateIsLoading(true)
-
+        setUpdateIsLoading(true);
+  
         try {
-          await contract?.invoke({
-            method: 'update_cv',
-            args: [
-              nativeToScVal(address, { type: "address" }), // owner
-              nativeToScVal(name, { type: "string" }),
-              nativeToScVal(email, { type: "string" }),
-              nativeToScVal(skills.split(',').map(s => s.trim()), { type: "vector<string>" }),
-              nativeToScVal(experience.split(',').map(e => e.trim()), { type: "vector<string>" }),
-              nativeToScVal(education.split(',').map(e => e.trim()), { type: "vector<string>" }),
-            ],
-            signAndSend: true
+          // Check if CV exists
+          const existingCV = await contract?.invoke({
+            method: 'get_cv',
+            args: [nativeToScVal(address, { type: "address" })],
           });
+  
+          const cvExists = existingCV !== null;
+  
 
-          toast.success("CV updated successfully!");
+          const args = [
+            nativeToScVal(address, { type: "address" }),
+            nativeToScVal(name, { type: "string" }),
+            nativeToScVal(email, { type: "string" }),
+            nativeToScVal(skills, { type: "string" }),
+            nativeToScVal(experience, { type: "string" }),
+            nativeToScVal(education, { type: "string" }),
+          ];
+  
+          if (cvExists) {
+            await contract?.invoke({
+              method: 'update_cv',
+              args,
+              signAndSend: true
+            });
+            toast.success("CV updated successfully!");
+          } else {
+            // Create CV
+            await contract?.invoke({
+              method: 'create_cv',
+              args,
+              signAndSend: true
+            });
+            toast.success("CV created successfully!");
+          }
         } catch (e) {
-          console.error(e)
-          toast.error('Error while updating CV. Try again…')
+          console.error(e);
+          toast.error('Error while updating or creating CV. Try again…');
         } finally {
-          setUpdateIsLoading(false)
-          toggleUpdate(!updateFrontend)
-        } 
+          setUpdateIsLoading(false);
+          toggleUpdate(!updateFrontend);
+          await fetchCV(); 
+        }
       }
     }
-  }
+  };
+  
+
+
 
   if (!contract) {
     return (
