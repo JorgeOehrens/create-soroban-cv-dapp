@@ -83,3 +83,5 @@ impl CVContract {
         env.storage().instance().get::<Address, CV>(&owner)
     }
 }
+
+mod test;
