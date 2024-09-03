@@ -81,6 +81,7 @@ impl CVContract {
 
     pub fn get_cv(env: Env, owner: Address) -> Option<CV> {
         env.storage().instance().get::<Address, CV>(&owner)
+
     }
 }
 
